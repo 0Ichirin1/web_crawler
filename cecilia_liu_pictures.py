@@ -27,8 +27,11 @@ class DownloadImage(Thread):
     def run(self):
         while self.url_queue.empty() == False:
             url = self.url_queue.get()
-            res = requests.get(url, headers=headers)
-            self.html_queue.put(res.text)
+            res = requests.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                self.html_queue.put(res.text)
+            else:
+                print("请求失败")
 
 # 解析类
 class ParseInfo(Thread):
@@ -42,10 +45,17 @@ class ParseInfo(Thread):
             formatting_pages = etree.HTML(html)
             images = formatting_pages.xpath(
                 "//ul[@class='poster-col3 clearfix']/li/div[@class='cover']/a/img/@src")
+
+            pic_path = "shishi"
+            if not os.path.exists(pic_path):
+                os.makedirs(pic_path)
+
+            base_path = os.getcwd() + "/" + pic_path + "/"
+
             for image in images:
-                dir_name = image.split("/")[-1].split(".")[0] + ".jpg"
+                dir_name = base_path + image.split("/")[-1].split(".")[0] + ".jpg"
                 try:
-                    pic = requests.get(image, timeout=10, headers=headers)
+                    pic = requests.get(image, timeout=15, headers=headers)
                     with open(dir_name, "wb") as f:
                         f.write(pic.content)
                 except requests.exceptions.ConnectionError:
@@ -63,7 +73,7 @@ if __name__ == '__main__':
         url_queue.put(url)
 
     crawl_list = []
-    for _ in range(5):
+    for _ in range(6):
         crawl_obj = DownloadImage(url_queue, html_queue)
         crawl_list.append(crawl_obj)
         crawl_obj.start()
@@ -72,7 +82,7 @@ if __name__ == '__main__':
         crawl.join()
 
     parse_list = []
-    for _ in range(5):
+    for _ in range(6):
         parse_obj = ParseInfo(html_queue)
         parse_obj.start()
         parse_list.append(parse_obj)
@@ -82,23 +92,3 @@ if __name__ == '__main__':
 
     end_time = time()
     print(end_time-start_time)
-
-        # res = requests.get(url, headers=headers)
-        # selector = etree.HTML(res.text)
-        # images = selector.xpath("//ul[@class='poster-col3 clearfix']/li/div[@class='cover']/a/img/@src")
-        # downloadImage(images)
-
-
-# def downloadImage(images):
-#     pic_path = "shishi"
-#     if not os.path.exists(pic_path):
-#         os.makedirs(pic_path)
-#     save_path = os.getcwd() + "/" + pic_path + "/"
-#     for image in images:
-#         dir = save_path + image.split("/")[-1].split(".")[0] + ".jpg"
-#         try:
-#             pic = requests.get(image, timeout=10)
-#             with open(dir, "wb") as f:
-#                 f.write(pic.content)
-#         except requests.exceptions.ConnectionError:
-#             print("连接失败，图片无法下载")
