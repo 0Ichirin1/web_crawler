@@ -1,11 +1,14 @@
 # -*- coding:utf-8 -*-
-# 下载 豆瓣 刘诗诗 图片
+#  多线程 下载 豆瓣 刘诗诗 图片
 import requests
 import json
+import os
 from selenium import webdriver
+from queue import Queue
 from lxml import etree
 from fake_useragent import UserAgent
-import os
+from threading import Thread
+from time import time
 
 ua = UserAgent()
 # 请求头
@@ -14,28 +17,88 @@ headers = {
     'user-agent': ua.random
 }
 
-def downloadImage(images):
-    pic_path = "shishi"
-    if not os.path.exists(pic_path):
-        os.makedirs(pic_path)
-    save_path = os.getcwd() + "/" + pic_path + "/"
-    for image in images:
-        dir = save_path + image.split("/")[-1].split(".")[0] + ".jpg"
-        try:
-            pic = requests.get(image, timeout=10)
-            with open(dir, "wb") as f:
-                f.write(pic.content)
-            # fp = open(dir, "wb")
-            # fp.write(pic.content)
-            # fp.close()
-        except requests.exceptions.ConnectionError:
-            print("连接失败，图片无法下载")
+# 爬虫类
+class DownloadImage(Thread):
+    def __init__(self, url_queue, html_queue):
+        Thread.__init__(self)
+        self.url_queue = url_queue
+        self.html_queue = html_queue
+
+    def run(self):
+        while self.url_queue.empty() == False:
+            url = self.url_queue.get()
+            res = requests.get(url, headers=headers)
+            self.html_queue.put(res.text)
+
+# 解析类
+class ParseInfo(Thread):
+    def __init__(self, html_queue):
+        Thread.__init__(self)
+        self.html_queue = html_queue
+
+    def run(self):
+        while self.html_queue.empty() == False:
+            html = self.html_queue.get()
+            formatting_pages = etree.HTML(html)
+            images = formatting_pages.xpath(
+                "//ul[@class='poster-col3 clearfix']/li/div[@class='cover']/a/img/@src")
+            for image in images:
+                dir_name = image.split("/")[-1].split(".")[0] + ".jpg"
+                try:
+                    pic = requests.get(image, timeout=10, headers=headers)
+                    with open(dir_name, "wb") as f:
+                        f.write(pic.content)
+                except requests.exceptions.ConnectionError:
+                    print("连接失败，图片无法下载")
+
 
 if __name__ == '__main__':
+    start_time = time()
+
+    url_queue = Queue()
+    html_queue = Queue()
+
     for i in range(0, 2791, 30):
         url = "https://movie.douban.com/celebrity/1274533/photos/?type=C&start={}&sortby=like&size=a&subtype=a".format(str(i))
-        res = requests.get(url, headers=headers)
-        selector = etree.HTML(res.text)
-        images = selector.xpath("//ul[@class='poster-col3 clearfix']/li/div[@class='cover']/a/img/@src")
-        downloadImage(images)
+        url_queue.put(url)
 
+    crawl_list = []
+    for _ in range(5):
+        crawl_obj = DownloadImage(url_queue, html_queue)
+        crawl_list.append(crawl_obj)
+        crawl_obj.start()
+
+    for crawl in crawl_list:
+        crawl.join()
+
+    parse_list = []
+    for _ in range(5):
+        parse_obj = ParseInfo(html_queue)
+        parse_obj.start()
+        parse_list.append(parse_obj)
+
+    for parse in parse_list:
+        parse.join()
+
+    end_time = time()
+    print(end_time-start_time)
+
+        # res = requests.get(url, headers=headers)
+        # selector = etree.HTML(res.text)
+        # images = selector.xpath("//ul[@class='poster-col3 clearfix']/li/div[@class='cover']/a/img/@src")
+        # downloadImage(images)
+
+
+# def downloadImage(images):
+#     pic_path = "shishi"
+#     if not os.path.exists(pic_path):
+#         os.makedirs(pic_path)
+#     save_path = os.getcwd() + "/" + pic_path + "/"
+#     for image in images:
+#         dir = save_path + image.split("/")[-1].split(".")[0] + ".jpg"
+#         try:
+#             pic = requests.get(image, timeout=10)
+#             with open(dir, "wb") as f:
+#                 f.write(pic.content)
+#         except requests.exceptions.ConnectionError:
+#             print("连接失败，图片无法下载")
