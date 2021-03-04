@@ -92,9 +92,8 @@ if __name__ == '__main__':
     url_queue = Queue()
     html_queue = Queue()
 
-    # 创建存放图片的文件夹
-    if not os.path.exists(PIC_PATH):
-        os.makedirs(PIC_PATH)
+    # 创建存放图片的文件夹 exist_ok=True 表示如果文件夹已存在，就什么都不做
+    os.makedirs(PIC_PATH, exist_ok=True)
     base_path = os.getcwd() + "/" + PIC_PATH + "/"
     # 将 图片列表的url添加到url队列中去
     for i in range(0, 2791, 30):
